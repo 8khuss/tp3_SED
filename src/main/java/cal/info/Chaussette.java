@@ -6,6 +6,7 @@ public class Chaussette {
     private String taille;
     private String typeTissu;
     private double prix;
+    private Integer venteId;
 
     public Chaussette() {}
 
@@ -31,4 +32,7 @@ public class Chaussette {
 
     public double getPrix() { return prix; }
     public void setPrix(double prix) { this.prix = prix; }
+
+    public Integer getVenteId() { return venteId; }
+    public void setVenteId(Integer venteId) { this.venteId = venteId; }
 }

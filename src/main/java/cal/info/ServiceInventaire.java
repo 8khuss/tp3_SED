@@ -1,72 +1,69 @@
 package cal.info;
 
-import java.util.ArrayList;
-import java.util.Iterator;
+import java.sql.Connection;
+import java.util.Collections;
 import java.util.List;
 
 public class ServiceInventaire {
+    private final DataBaseManager dbManager;
+    private final ChaussetteDAO dao;
 
-    private static final List<Chaussette> stock = new ArrayList<>();
+    public ServiceInventaire(DataBaseManager dbManager, ChaussetteDAO dao) {
+        this.dbManager = dbManager;
+        this.dao = dao;
+    }
 
-    public static void ajouterChaussette(Chaussette c) {
+    public void ajouterChaussette(Chaussette c) {
         if (c == null) return;
-        if (c.getIdentifiant() == 0) {
-            int next = 0;
-            for (Chaussette x : stock) {
-                if (x.getIdentifiant() > next) next = x.getIdentifiant();
-            }
-            c.setIdentifiant(next + 1);
+        try (Connection conn = dbManager.getConnection()) {
+            dao.save(conn, c);
+        } catch (Exception e) {
+            throw new RuntimeException("Erreur ajout chaussette", e);
         }
-        stock.add(c);
     }
 
-    public static boolean modifierChaussette(int id, Chaussette nouvelle) {
-        if (nouvelle == null) return false;
-        for (int i = 0; i < stock.size(); i++) {
-            if (stock.get(i).getIdentifiant() == id) {
-                nouvelle.setIdentifiant(id);
-                stock.set(i, nouvelle);
-                return true;
-            }
+    public boolean modifierChaussette(int id, Chaussette nouvelle) {
+        try (Connection conn = dbManager.getConnection()) {
+            nouvelle.setIdentifiant(id);
+            return dao.update(conn, nouvelle);
+        } catch (Exception e) {
+            throw new RuntimeException("Erreur modif chaussette", e);
         }
-        return false;
     }
 
-    public static boolean supprimerChaussette(int id) {
-        Iterator<Chaussette> it = stock.iterator();
-        while (it.hasNext()) {
-            if (it.next().getIdentifiant() == id) {
-                it.remove();
-                return true;
-            }
+    public boolean supprimerChaussette(int id) {
+        try (Connection conn = dbManager.getConnection()) {
+            return dao.delete(conn, id);
+        } catch (Exception e) {
+            throw new RuntimeException("Erreur suppression chaussette", e);
         }
-        return false;
     }
 
-    // Lister tout
-    public static List<Chaussette> listerChaussettes() {
-        return new ArrayList<>(stock);
-    }
-
-    public static List<Chaussette> rechercherChaussette(int idRecherche) {
-        List<Chaussette> res = new ArrayList<>();
-        for (Chaussette c : stock) {
-            if (c.getIdentifiant() == idRecherche) res.add(c);
+    public List<Chaussette> listerChaussettes() {
+        try (Connection conn = dbManager.getConnection()) {
+            return dao.findAllAvailable(conn);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Collections.emptyList();
         }
-        return res;
     }
 
-
-    public static Chaussette retirerParId(int id) {
-        for (int i = 0; i < stock.size(); i++) {
-            if (stock.get(i).getIdentifiant() == id) {
-                return stock.remove(i);
-            }
+    public List<Chaussette> rechercherChaussette(int id) {
+        try (Connection conn = dbManager.getConnection()) {
+            Chaussette c = dao.findById(conn, id);
+            return c != null ? List.of(c) : Collections.emptyList();
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Collections.emptyList();
         }
-        return null;
     }
 
-    public static void remettre(Chaussette c) {
-        if (c != null) stock.add(c);
+    public List<Chaussette> rechercherParCriteres(String couleur, String taille) {
+        try (Connection conn = dbManager.getConnection()) {
+            return dao.findByCriteria(conn, couleur, taille);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Collections.emptyList();
+        }
     }
 }

@@ -12,178 +12,128 @@ import java.util.List;
 
 public class ControleurChaussette implements HttpHandler {
 
+    private final ServiceInventaire service;
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    public ControleurChaussette(ServiceInventaire service) {
+        this.service = service;
+    }
+
     @Override
     public void handle(HttpExchange echange) throws IOException {
         String methode = echange.getRequestMethod();
-
-        switch (methode) {
-            case "GET": {
-                String parametres = echange.getRequestURI().getQuery();
-
-                if (parametres != null && parametres.contains("identifiant=")) {
-                    int id = parseId(parametres);
-                    if (id < 0) { envoyerReponseTexte(echange, "Identifiant invalide.", 400); break; }
-                    afficherChaussette(echange, id);
-                } else {
-                    afficherToutesLesChaussettes(echange);
-                }
-                break;
-            }
-
-            case "POST": {
-                try {
-                    ajouterNouvelleChaussette(echange);
-                } catch (IOException ex) {
-                    ex.printStackTrace();
-                    echange.sendResponseHeaders(500, -1);
-                }
-                break;
-            }
-
-            case "PUT": {
-                String parametres = echange.getRequestURI().getQuery();
-                if (parametres == null || !parametres.contains("identifiant=")) {
-                    envoyerReponseTexte(echange, "Le paramètre 'identifiant' est manquant.", 400);
-                    break;
-                }
-                int id = parseId(parametres);
-                if (id < 0) { envoyerReponseTexte(echange, "Identifiant invalide.", 400); break; }
-
-                try {
-                    modifierChaussette(echange, id);
-                } catch (IOException ex) {
-                    ex.printStackTrace();
-                    echange.sendResponseHeaders(500, -1);
-                }
-                break;
-            }
-
-            case "DELETE": {
-                String parametres = echange.getRequestURI().getQuery();
-
-                if (parametres != null && parametres.contains("identifiant=")) {
-                    int id = parseId(parametres);
-                    if (id < 0) { envoyerReponseTexte(echange, "Identifiant fourni invalide.", 400); break; }
-                    retirerChaussette(echange, id);
-                } else {
-                    envoyerReponseTexte(echange, "Le paramètre 'identifiant' est manquant.", 400);
-                }
-                break;
-            }
-
-            default:
-                echange.sendResponseHeaders(405, -1); // Méthode non autorisée
-                break;
-        }
-    }
-
-    // POST: ajouter
-    public void ajouterNouvelleChaussette(HttpExchange echange) throws IOException {
-        var lecteur = new InputStreamReader(echange.getRequestBody(), StandardCharsets.UTF_8);
-        var mapper = new ObjectMapper();
-
-        Chaussette chaussette = mapper.readValue(lecteur, Chaussette.class);
-
-        // validation minimale
-        if (chaussette == null ||
-                chaussette.getCouleur() == null || chaussette.getCouleur().trim().isEmpty() ||
-                chaussette.getTaille()  == null || chaussette.getTaille().trim().isEmpty()  ||
-                chaussette.getTypeTissu()== null || chaussette.getTypeTissu().trim().isEmpty()||
-                chaussette.getPrix() < 0) {
-            envoyerReponseTexte(echange, "Données invalides.", 400);
-            return;
-        }
-
-        ServiceInventaire.ajouterChaussette(chaussette);
-        envoyerReponseTexte(echange, "Nouvelle chaussette ajoutée avec succès.", 201);
-    }
-
-    // PUT: modifier
-    public void modifierChaussette(HttpExchange echange, int identifiant) throws IOException {
-        var lecteur = new InputStreamReader(echange.getRequestBody(), StandardCharsets.UTF_8);
-        var mapper = new ObjectMapper();
-
-        Chaussette nouvelle = mapper.readValue(lecteur, Chaussette.class);
-
-        if (nouvelle == null ||
-                nouvelle.getCouleur() == null || nouvelle.getCouleur().trim().isEmpty() ||
-                nouvelle.getTaille()  == null || nouvelle.getTaille().trim().isEmpty()  ||
-                nouvelle.getTypeTissu()== null || nouvelle.getTypeTissu().trim().isEmpty()||
-                nouvelle.getPrix() < 0) {
-            envoyerReponseTexte(echange, "Données invalides.", 400);
-            return;
-        }
-
-        boolean ok = ServiceInventaire.modifierChaussette(identifiant, nouvelle);
-        if (ok) envoyerReponseTexte(echange, "La chaussette a été modifiée avec succès.", 200);
-        else    envoyerReponseTexte(echange, "Aucune chaussette trouvée pour l'identifiant " + identifiant, 404);
-    }
-
-    // DELETE: supprimer
-    public void retirerChaussette(HttpExchange echange, int identifiant) throws IOException {
-        boolean ok = ServiceInventaire.supprimerChaussette(identifiant);
-        if (ok) {
-            envoyerReponseTexte(echange, "La chaussette #" + identifiant + " a été supprimée.", 200);
-        } else {
-            envoyerReponseTexte(echange, "Aucune chaussette trouvée avec l'identifiant " + identifiant, 404);
-        }
-    }
-
-    // GET: lister
-    public void afficherToutesLesChaussettes(HttpExchange echange) {
-        List<Chaussette> liste = ServiceInventaire.listerChaussettes();
-        var mapper = new ObjectMapper();
-
         try {
-            String json = mapper.writeValueAsString(liste);
-            byte[] contenu = json.getBytes(StandardCharsets.UTF_8);
-
-            echange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-            echange.sendResponseHeaders(200, contenu.length);
-            echange.getResponseBody().write(contenu);
-            echange.getResponseBody().close();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    // GET: par id (le service renvoie une liste)
-    public void afficherChaussette(HttpExchange echange, int identifiant) throws IOException {
-        List<Chaussette> trouvees = ServiceInventaire.rechercherChaussette(identifiant);
-        var mapper = new ObjectMapper();
-
-        if (trouvees.isEmpty()) {
-            envoyerReponseTexte(echange, "Aucune chaussette trouvée pour l'identifiant : " + identifiant, 404);
-            return;
-        }
-
-        String reponseJson = mapper.writeValueAsString(trouvees);
-        byte[] contenu = reponseJson.getBytes(StandardCharsets.UTF_8);
-
-        echange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
-        echange.sendResponseHeaders(200, contenu.length);
-        echange.getResponseBody().write(contenu);
-        echange.getResponseBody().close();
-    }
-
-    // utilitaire texte
-    private void envoyerReponseTexte(HttpExchange echange, String message, int code) throws IOException {
-        byte[] donnees = message.getBytes(StandardCharsets.UTF_8);
-        echange.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
-        echange.sendResponseHeaders(code, donnees.length);
-        echange.getResponseBody().write(donnees);
-        echange.getResponseBody().close();
-    }
-
-    // parsing simple: identifiant=123[&...]
-    private int parseId(String params) {
-        try {
-            String v = params.split("identifiant=")[1];
-            int i = v.indexOf('&');
-            if (i >= 0) v = v.substring(0, i);
-            return Integer.parseInt(v.replaceAll("[^0-9]", ""));
+            switch (methode) {
+                case "GET": handleGet(echange); break;
+                case "POST": handlePost(echange); break;
+                case "PUT": handlePut(echange); break;
+                case "DELETE": handleDelete(echange); break;
+                default: echange.sendResponseHeaders(405, -1);
+            }
         } catch (Exception e) {
-            return -1;
+            e.printStackTrace();
+            envoyerReponseTexte(echange, "Erreur interne: " + e.getMessage(), 500);
         }
+    }
+
+    private void handleGet(HttpExchange echange) throws IOException {
+        String query = echange.getRequestURI().getQuery();
+
+        if (query != null) {
+            if (query.contains("identifiant=")) {
+                int id = parseId(query);
+                List<Chaussette> res = service.rechercherChaussette(id);
+                if (res.isEmpty()) envoyerReponseTexte(echange, "Non trouvé", 404);
+                else envoyerJson(echange, res, 200);
+            } else {
+                String couleur = extraireParam(query, "couleur");
+                String taille = extraireParam(query, "taille");
+                if (couleur == null && taille == null) {
+                    envoyerJson(echange, service.listerChaussettes(), 200);
+                } else {
+                    envoyerJson(echange, service.rechercherParCriteres(couleur, taille), 200);
+                }
+            }
+        } else {
+            envoyerJson(echange, service.listerChaussettes(), 200);
+        }
+    }
+
+    private void handlePost(HttpExchange echange) throws IOException {
+        try (InputStreamReader reader = new InputStreamReader(echange.getRequestBody(), StandardCharsets.UTF_8)) {
+            Chaussette c = mapper.readValue(reader, Chaussette.class);
+            if (invalide(c)) {
+                envoyerReponseTexte(echange, "Données invalides", 400);
+                return;
+            }
+            service.ajouterChaussette(c);
+            envoyerJson(echange, c, 201);
+        }
+    }
+
+    private void handlePut(HttpExchange echange) throws IOException {
+        String query = echange.getRequestURI().getQuery();
+        if (query == null || !query.contains("identifiant=")) {
+            envoyerReponseTexte(echange, "ID manquant", 400);
+            return;
+        }
+        int id = parseId(query);
+
+        try (InputStreamReader reader = new InputStreamReader(echange.getRequestBody(), StandardCharsets.UTF_8)) {
+            Chaussette c = mapper.readValue(reader, Chaussette.class);
+            if (invalide(c)) {
+                envoyerReponseTexte(echange, "Données invalides", 400);
+                return;
+            }
+            boolean ok = service.modifierChaussette(id, c);
+            if (ok) envoyerJson(echange, c, 200);
+            else envoyerReponseTexte(echange, "Introuvable", 404);
+        }
+    }
+
+    private void handleDelete(HttpExchange echange) throws IOException {
+        String query = echange.getRequestURI().getQuery();
+        if (query != null && query.contains("identifiant=")) {
+            int id = parseId(query);
+            boolean ok = service.supprimerChaussette(id);
+            if (ok) envoyerReponseTexte(echange, "Supprimé", 200);
+            else envoyerReponseTexte(echange, "Introuvable", 404);
+        } else {
+            envoyerReponseTexte(echange, "ID manquant", 400);
+        }
+    }
+
+    private boolean invalide(Chaussette c) {
+        return c == null || c.getPrix() < 0 || c.getCouleur() == null;
+    }
+
+    private void envoyerJson(HttpExchange ex, Object obj, int code) throws IOException {
+        byte[] bytes = mapper.writeValueAsBytes(obj);
+        ex.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+        ex.sendResponseHeaders(code, bytes.length);
+        try (OutputStream os = ex.getResponseBody()) { os.write(bytes); }
+    }
+
+    private void envoyerReponseTexte(HttpExchange ex, String msg, int code) throws IOException {
+        byte[] bytes = msg.getBytes(StandardCharsets.UTF_8);
+        ex.getResponseHeaders().set("Content-Type", "text/plain; charset=UTF-8");
+        ex.sendResponseHeaders(code, bytes.length);
+        try (OutputStream os = ex.getResponseBody()) { os.write(bytes); }
+    }
+
+    private int parseId(String query) {
+        try {
+            String v = query.split("identifiant=")[1].split("&")[0];
+            return Integer.parseInt(v);
+        } catch (Exception e) { return -1; }
+    }
+
+    private String extraireParam(String query, String param) {
+        if (query == null) return null;
+        for (String pair : query.split("&")) {
+            String[] kv = pair.split("=");
+            if (kv.length == 2 && kv[0].equals(param)) return kv[1];
+        }
+        return null;
     }
 }

@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # Hautlesbas
 =======
 TP1_SED
